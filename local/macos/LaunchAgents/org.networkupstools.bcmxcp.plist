@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>KeepAlive</key>
+		<true/>
+    <key>Label</key>
+    <string>org.networkupstools.bcmxcp.plist</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>ProgramArguments</key>
+  		<array>
+  			<string>/opt/local/bin/bcmxcp_usb</string>
+        <string>-a</string>
+        <string>pw5115</string>
+  			<string>-DDDDD</string>
+  		</array>
+
+    <key>StandardOutPath</key>
+		<string>/Library/Logs/bcmxcp_usb.log</string>
+		<key>StandardErrorPath</key>
+		<string>/Library/Logs/bcmxcp_usb.log</string>
+  </dict>
+</plist>

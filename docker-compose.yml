@@ -1,0 +1,194 @@
+version: '3.9'
+services:
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/var/www/html:/usr/share/nginx/html
+    labels:
+      - "autoheal=true"
+    healthcheck:
+      test: curl --fail http://localhost:80/ || exit 1
+      interval: 10s
+      timeout: 30s
+      retries: 3
+      start_period: 20s
+
+
+  # nut-upsd:
+  #   image: nut-upsd:latest
+  #   container_name: nut-upsd
+  #   build:
+  #     context: ./upsd
+  #     dockerfile: ./Dockerfile
+  #   restart: always
+  #   environment:
+  #     - API_USER=upsmon
+  #     - API_PASSWORD=
+  #     - DESCRIPTION=UPS Eaton Powerware 5115
+  #     - DRIVER=bcmxcp_usb
+  #     - GROUP=nut
+  #     - NAME='pw5115'
+  #     #- POLLINTERVAL=30
+  #     - PORT=auto
+  #     - SDORDER=''
+  #     - SECRET=nut-upsd-password
+  #     - SERIAL=''
+  #     - SERVER=master
+  #     - USER=nut
+  #     - VENDORID=''
+  #   ports:
+  #   - 3491:3493
+  #   privileged: true
+
+
+  # A HTTP API that wraps output of the upsc command as a JSON output and serves it on an endpoint.
+  #Meant to be used in a Docker environment and dependent on nut-upsd to serve as data input.
+  nut-http:
+    container_name: nut-http
+    image: deetoreu/nut-http:latest
+    ports:
+      - 3001:3001
+    environment:
+      # Docker Desktop 18.03+ for Windows and Mac supports host.docker.internal as a functioning alias for localhost.
+      - NUT_ADDRESS=host.docker.internal
+      - LOG_LEVEL=OFF
+    volumes:
+      - ./volumes/nut-http/logs:/usr/src/app/logs
+    labels:
+      - "autoheal=true"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:3001/devices || exit 1
+      interval: 10s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+
+  # See more image in Docker Hub: ghcr.io/druggeri/nut_exporter:3.0.0
+  # Custom entrypoint with extra parms to nut_exporter executable
+  nut-metrics-exporter:
+    container_name: nut-metrics-exporter
+    image: nut_exporter:custom-3.0.0
+    entrypoint: /nut_exporter --nut.vars_enable=ambient.temperature,ambient.temperature.high,battery.charge,battery.charger.status,battery.packs,battery.runtime,battery.runtime,battery.voltage,input.frequency,input.frequency.high,input.frequency.low,input.frequency.nominal,input.transfer.boost.high,input.transfer.high,input.transfer.low,input.transfer.trim.low,input.voltage,input.voltage.nominal,outlet.1.delay.shutdown,outlet.1.delay.start,outlet.1.id,outlet.1.status,outlet.2.delay.shutdown,outlet.2.delay.start,outlet.2.id,outlet.2.status,output.current,output.current.nominal,output.frequency,output.frequency.nominal,output.phases,output.voltage,output.voltage.nominal,ups.beeper.status,ups.load,ups.alarm,ups.power,ups.power.nominal,ups.realpower,ups.status,ups.test.result  --metrics.namespace=nut
+    build:
+      context: ./nut-exporter
+      dockerfile: ./Dockerfile
+    ports:
+      - 9199:9199
+    labels:
+      - "autoheal=true"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:9199/metrics || exit 1
+      interval: 10s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+
+  webnut:
+    image: teknologist/webnut:latest
+    container_name: webnut
+    entrypoint: /bin/bash /data/entrypoint_overwrited.sh
+    environment:
+      # Docker Desktop 18.03+ for Windows and Mac supports host.docker.internal as a functioning alias for localhost.
+      - UPS_HOST=host.docker.internal
+      - UPS_USER_FILE=/run/secrets/upsd_username
+      - UPS_PASSWORD_FILE=/run/secrets/upsd_password
+    ports:
+      - 6543:6543
+    secrets:
+      - upsd_username
+      - upsd_password
+    volumes:
+      - ./webnut/entrypoint/:/data/
+      - ./scripts/:/scripts/
+    labels:
+      - "autoheal=true"
+    healthcheck:
+      test: curl --fail http://localhost:6543/ || exit 1
+      interval: 10s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prom_data:/prometheus
+    labels:
+      - "autoheal=true"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:9090  || exit 1
+      interval: 10s
+      timeout: 15s
+      retries: 10
+      start_period: 60s
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - 3000:3000
+    entrypoint: /bin/bash /data/entrypoint_overwrited.sh
+    tmpfs:
+      - /run/secrets
+    environment:
+      - GF_SECURITY_ADMIN_USER_FILE=/run/secrets/grafana_username
+      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_password
+    volumes:
+      # See more https://stackoverflow.com/questions/48094850/docker-stack-setting-environment-variable-from-secrets
+      - ./grafana/provisioning/datasources/:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning/dashboards/:/etc/grafana/provisioning/dashboards
+      - ./grafana/entrypoint/:/data/
+      - ./scripts/:/scripts/
+    secrets:
+      - grafana_username
+      - grafana_password
+    labels:
+      - "autoheal=true"
+    healthcheck:
+      test: curl --fail http://localhost:3000/api/health || exit 1
+      interval: 10s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
+
+
+  # See more https://medium.com/@saklani1408/configuring-healthcheck-in-docker-compose-3fa6439ee280
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: autoheal
+    tty: true
+    restart: always
+    environment:
+      - AUTOHEAL_INTERVAL=60
+      - AUTOHEAL_START_PERIOD=120
+      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+
+volumes:
+  prom_data:
+
+secrets:
+   grafana_username:
+    file: ./secrets/grafana_username
+   grafana_password:
+    file: ./secrets/grafana_password
+   upsd_username:
+    file: ./secrets/upsd_username
+   upsd_password:
+    file: ./secrets/upsd_password

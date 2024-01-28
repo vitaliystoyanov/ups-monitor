@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <title>❯ shell2http</title>
+      <style>
+         body {
+         font-family: sans-serif;
+         }
+         li {
+         list-style-type: none;
+         }
+         li:before {
+         content: "❯";
+         padding-right: 5px;
+         }
+      </style>
+   </head>
+   <body>
+      <h1>Discover</h1>
+      <ul>
+         <li><a href="http://host.docker.internal:3000" target="_blank" >Grafana dashboard</a> <span style="color: #888">- UPS monitoring dashboards<span></li>
+          <li><a href="http://host.docker.internal:6543" target="_blank" >WebNUT</a> <span style="color: #888">- Monitoring UPS variables<span></li>
+          <li><a href="http://host.docker.internal:9090" target="_blank" >Prometheus</a> <span style="color: #888">- Collecting UPS metrics<span></li>
+            <li><a href="http://host.docker.internal:3001/devices?parsed=true" target="_blank" >NUT http api</a> <span style="color: #888">- Devices. An API wrapper that outputs the upsc command as a JSON output<span></li>
+      </ul>
+   </body>
+</html>
